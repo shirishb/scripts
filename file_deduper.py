@@ -32,6 +32,8 @@ class File():
 				self.__hash = file.__hash
 				self.__size = file.__size
 				self.__modified_timestamp = file.__modified_timestamp
+				return True
+		return False
 
 	# note: method assumes that file exists
 	def calculate(self):
@@ -58,6 +60,14 @@ class File():
 	def getFilePath(self):
 		return os.path.join(self.__root, self.__filename)
 
+
+def doesFileMatchPattern(filepath, patternList):
+	for pattern in patternList:
+		if fnmatch.fnmatch(filepath, pattern):
+			return True
+	return False
+
+
 def generateFileList(directoryList, ignoreList, filterList):
 	fileList = []
 	for directory in directoryList:
@@ -79,21 +89,23 @@ def generateFileList(directoryList, ignoreList, filterList):
 			for file in files:
 				if IGNORE_HIDDEN and file.startswith('.'):
 					continue
+
 				filepath = os.path.join(root, file)
 				if not os.path.exists(filepath):
 					continue
+
 				if IGNORE_SYMLINKS and os.path.islink(filepath):
 					continue
-				for ignore in ignoreList:
-					if fnmatch.fnmatch(filepath, ignore):
-						log.debug("file {} is ignored".format(file))
-						continue
-				if len(filterList) == 0:
+
+				if doesFileMatchPattern(filepath, ignoreList):
+					log.debug("file {} is ignored".format(file))
+					continue
+
+				if doesFileMatchPattern(filepath, filterList):
 					fileList.append( File(file, root))
-				else:
-					for filter in filterList:
-						if fnmatch.fnmatch(filepath, filter):
-							fileList.append( File(file, root))
+
+
+
 
 	return fileList
 
@@ -112,7 +124,7 @@ def parseArgs():
 	parser.add_argument('--directory', '-d', nargs='*', required=True)
 	parser.add_argument('--ignore', '-i', nargs='*', default=[],
 		help='List of file patterns to be ignored from dedup list, e.g. "--ignore *.c *.h"')
-	parser.add_argument('--filter', '-f', nargs='*', default=[],
+	parser.add_argument('--filter', '-f', nargs='*', default=['*'],
 		help='List of file patterns to be included in dedup list, e.g. "--filter *.jpg *.png"')
 	parser.add_argument('--verbose', '-v', action='count', default=0)
 	parser.add_argument('--delete', action='store_true', default=False)
@@ -142,7 +154,8 @@ if __name__ == '__main__':
 			fileListOld = loadObject(PERSIST_FILENAME)
 			for f in fileList:
 				for o in fileListOld:
-					f.update(o)
+					if f.update(o):
+						fileListOld.remove(o)
 		except FileNotFoundError:
 			pass
 
