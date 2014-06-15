@@ -171,7 +171,7 @@ if __name__ == '__main__':
 				print("\t{}".format(f))
 			if args.delete:
 				for i in range(1,len(files)):
-					log.error("Deleting file {}".format(files[i].getFilePath()))
+					log.info("Deleting file {}".format(files[i].getFilePath()))
 					os.remove(files[i].getFilePath())
 
 
