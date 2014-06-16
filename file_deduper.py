@@ -12,6 +12,7 @@ IGNORE_HIDDEN=True
 IGNORE_SYMLINKS=True
 PERSIST_FILELIST=True
 PERSIST_FILENAME='dedup.filelist'
+IDENTICAL_FILESIZE_CHECK=True
 
 def parseArgs():
 	parser = argparse.ArgumentParser()
@@ -36,8 +37,6 @@ class File():
 		self.__hash = None
 		self.__size = None
 		self.__modified_timestamp = None
-		# Flag variables
-		self.__marked_for_action = False
 
 	def __str__(self):
 		return "{}, {} ({} bytes)".format(self.__dirpath, self.__filename, self.__size)
@@ -48,25 +47,24 @@ class File():
 	def getFileSize(self):
 		return self.__size
 
-	def getFilePath(self):
-		return os.path.join(self.__dirpath, self.__filename)
-
 	def getHash(self):
 		return self.__hash
 
-	def mark(self):
-		self.__marked_for_action = True
-
-	def isMarked(self):
-		return self.__marked_for_action
+	def getFilePath(self):
+		return os.path.join(self.__dirpath, self.__filename)
 
 	def updateHashFromFile(self, file):
+		# Check that file is identical, i.e. has same name and directory path
+		# before updating hash values
+
+		# Method returns True if file was updated. This functionality was
+		# added to allow support for an optimisation to prune the saved file
+		# list.
 		if self.__filename == file.__filename:
 			if self.__dirpath == file.__dirpath:
 				self.__hash = file.__hash
 				self.__size = file.__size
 				self.__modified_timestamp = file.__modified_timestamp
-				# do not update self.__marked_for_action
 				return True
 		return False
 
@@ -91,7 +89,6 @@ class File():
 				 md5.update(chunk)
 		self.__hash = md5.hexdigest()
 
-
 def pathMatchesPattern(path, patternList):
 	for pattern in patternList:
 		if fnmatch.fnmatch(path, pattern):
@@ -110,14 +107,13 @@ def pathMatchesExclusionRules(name, dirpath, excludePatternList, includePatternL
 		return True
 	return not pathMatchesPattern(path, includePatternList)
 
-
-
 def generateFileList(directoryList, excludePatternList, includePatternList):
 	fileList = []
 	for directory in directoryList:
 		for root, dirs, files in os.walk(directory, topdown=True):
 			for dir in dirs:
-				if pathMatchesExclusionRules(dir, root, excludePatternList, includePatternList):
+				# User provided filters are not applied to directories
+				if pathMatchesExclusionRules(dir, root, [], ['*']):
 					dirs.remove(dir)
 
 			for file in files:
@@ -153,6 +149,7 @@ def isFileSizeIdenticalInList(fileList):
 				return False
 	return True
 
+# TODO: wonder if I can merge this with isFileSizeIdenticalInList...
 def isFileNameIdenticalInList(fileList):
 	filename = None
 	for file in fileList:
@@ -163,7 +160,7 @@ def isFileNameIdenticalInList(fileList):
 				return False
 	return True
 
-if __name__ == '__main__':
+def main():
 	log.basicConfig(level=log.DEBUG, format='%(levelname)s: %(message)s')
 
 	args = parseArgs()
@@ -209,13 +206,16 @@ if __name__ == '__main__':
 				for f in files:
 					print("\t{}".format(f))
 			if args.delete:
-				if not isFileSizeIdenticalInList(files):
+				if IDENTICAL_FILESIZE_CHECK and not isFileSizeIdenticalInList(files):
 					log.info("File size is not identical")
 					break
 				if args.exact and not isFileNameIdenticalInList(files):
 					log.info("File name is not identical")
 					break
+				# Delete all except the first file in list
 				for i in range(1,len(files)):
 					log.info("Deleting file {}".format(files[i].getFilePath()))
 					os.remove(files[i].getFilePath())
 
+if __name__ == '__main__':
+	main()
